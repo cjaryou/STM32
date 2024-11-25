@@ -5,7 +5,7 @@
 // Gecikme fonksiyonu
 void delay_ms(uint32_t ms) {
     for (uint32_t i = 0; i < ms * 4000; i++) {
-        __NOP(); // Bos döngü (yaklasik 1 ms)
+        __NOP(); // Boş döngü (yaklaşık 1 ms)
     }
 }
 
@@ -14,17 +14,19 @@ void GPIO_Init(void) {
     // GPIOB için saat etkinleştir (LED'ler)
     RCC->AHB1ENR |= RCC_AHB1ENR_GPIOBEN;
 
-    // GPIOC için saat etkinleştir (Buton - PC13)
+    // GPIOC için saat etkinleştir (Tuşlar - PC13-PC10)
     RCC->AHB1ENR |= RCC_AHB1ENR_GPIOCEN;
 
     // PB0-PB7 pinlerini çıkış moduna ayarla
     GPIOB->MODER &= ~0x0000FFFF; // Mod temizleme
     GPIOB->MODER |= 0x00005555;  // Çıkış moduna ayarla
 
-    // PC13 pinini giriş moduna ayarla
-    GPIOC->MODER &= ~(3UL << (13 * 2)); // Giriş modu
-    GPIOC->PUPDR &= ~(3UL << (13 * 2)); // Pull-up/pull-down temizle
-    GPIOC->PUPDR |= (2UL << (13 * 2));  // Pull-down aktif et
+    // PC10-PC13 pinlerini giriş moduna ayarla (Tuşlar için)
+    for (int i = 10; i <= 13; i++) {
+        GPIOC->MODER &= ~(3UL << (i * 2)); // Giriş modu
+        GPIOC->PUPDR &= ~(3UL << (i * 2)); // Pull-up/pull-down temizle
+        GPIOC->PUPDR |= (2UL << (i * 2));  // Pull-down aktif et
+    }
 }
 
 // LED durumlarını güncelle
@@ -32,64 +34,72 @@ void LED_Display(uint8_t pattern) {
     GPIOB->ODR = (GPIOB->ODR & ~0xFF) | (pattern & 0xFF);
 }
 
-// LED desenlerini kontrol et
-void LED_Pattern(uint8_t pattern_index) {
-    switch (pattern_index) {
-        case 0: // Ortadan dışa doğru
-            for (int i = 0; i < 4; i++) {
-                LED_Display((1 << (3 - i)) | (1 << (4 + i)));
-                delay_ms(DELAY);
-            }
-            break;
-        case 1: // Soldaki 4 LED
-            for (int i = 0; i < 2; i++) {
-                LED_Display(0x0F); // Soldaki LED'leri yak
-                delay_ms(DELAY);
-                LED_Display(0x00); // Tüm LED'leri kapat
-                delay_ms(DELAY);
-            }
-            break;
-        case 2: // Sağdaki 4 LED
-            for (int i = 0; i < 2; i++) {
-                LED_Display(0xF0); // Sağdaki LED'leri yak
-                delay_ms(DELAY);
-                LED_Display(0x00); // Tüm LED'leri kapat
-                delay_ms(DELAY);
-            }
-            break;
-        case 3: // LED chaser (tek tek ilerleyen ışık)
-            for (int i = 0; i < 8; i++) {
-                LED_Display(1 << i);
-                delay_ms(DELAY);
-            }
-            break;
-        default: // Tüm LED'leri kapat
-            LED_Display(0x00);
-            break;
+// Kara şimşek deseni
+void LED_KaraSimsek(void) {
+    for (int i = 0; i < 4; i++) {
+        LED_Display((1 << (3 - i)) | (1 << (4 + i)));
+        delay_ms(DELAY);
+    }
+}
+
+// LED chaser (tek tek ilerleyen ışık)
+void LED_Chaser(void) {
+    for (int i = 0; i < 8; i++) {
+        LED_Display(1 << i);
+        delay_ms(DELAY);
+    }
+}
+
+// Mod 255 (tüm LED'lerin hızlı yanıp sönmesi)
+void LED_Mod255(void) {
+    for (int i = 0; i < 8; i++) {
+        LED_Display(0xFF);
+        delay_ms(DELAY);
+        LED_Display(0x00);
+        delay_ms(DELAY);
+    }
+}
+
+// Polis çakarı deseni
+void LED_PolisCakari(void) {
+    for (int i = 0; i < 4; i++) {
+        LED_Display(0x0F); // Soldaki LED'ler
+        delay_ms(DELAY);
+        LED_Display(0xF0); // Sağdaki LED'ler
+        delay_ms(DELAY);
     }
 }
 
 int main(void) {
     GPIO_Init(); // GPIO yapılandırma
 
-    uint8_t current_pattern = 0; // Aktif desen indeksi
-    uint8_t button_state = 0;    // Buton durumu
-
     while (1) {
-        // LED desenini uygula
-        LED_Pattern(current_pattern);
-
-        // Butonun durumunu kontrol et (PC13 LOW ise basılmış demektir)
-        if ((GPIOC->IDR & (1 << 13)) == 0) {
-            delay_ms(50); // Debouncing için küçük gecikme
-            if ((GPIOC->IDR & (1 << 13)) == 0) { // Hala basılıysa
-                if (!button_state) { // Daha önce algılanmamışsa
-                    current_pattern = (current_pattern + 1) % 4; // Deseni değiştir
-                    button_state = 1; // Butonun basıldığını kaydet
-                }
+        if ((GPIOC->IDR & (1 << 13)) == 0) { // K tuşu (PC13)
+            delay_ms(50); // Debouncing için
+            if ((GPIOC->IDR & (1 << 13)) == 0) {
+                LED_KaraSimsek();
             }
-        } else {
-            button_state = 0; // Buton bırakıldıysa sıfırla
+        }
+
+        if ((GPIOC->IDR & (1 << 12)) == 0) { // L tuşu (PC12)
+            delay_ms(50);
+            if ((GPIOC->IDR & (1 << 12)) == 0) {
+                LED_Chaser();
+            }
+        }
+
+        if ((GPIOC->IDR & (1 << 11)) == 0) { // M tuşu (PC11)
+            delay_ms(50);
+            if ((GPIOC->IDR & (1 << 11)) == 0) {
+                LED_Mod255();
+            }
+        }
+
+        if ((GPIOC->IDR & (1 << 10)) == 0) { // P tuşu (PC10)
+            delay_ms(50);
+            if ((GPIOC->IDR & (1 << 10)) == 0) {
+                LED_PolisCakari();
+            }
         }
     }
 }
