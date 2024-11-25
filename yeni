@@ -1,0 +1,135 @@
+#include "stm32f4xx.h"
+
+// LED PINLERİ TANIMLARI (Örnek: LED'ler GPIOA'da)
+#define LED1_PIN  GPIO_PIN_0
+#define LED2_PIN  GPIO_PIN_1
+#define LED3_PIN  GPIO_PIN_2
+#define LED4_PIN  GPIO_PIN_3
+#define LED_PORT  GPIOA
+
+// UART Girdi Değişkeni
+volatile char received_char = 0;
+
+// Fonksiyon Prototipleri
+void SystemClock_Config(void);
+void GPIO_Init(void);
+void UART_Init(void);
+void delay_ms(uint32_t ms);
+
+void KaraSimsek(void);
+void LedChaser(void);
+void Mod255(void);
+void PolisCakari(void);
+
+// Ana Program
+int main(void) {
+    // Başlangıç Ayarları
+    SystemClock_Config();
+    GPIO_Init();
+    UART_Init();
+
+    while (1) {
+        if (received_char != 0) {
+            switch (received_char) {
+                case 'K': // Kara Şimşek
+                    KaraSimsek();
+                    break;
+                case 'L': // Led Chaser
+                    LedChaser();
+                    break;
+                case 'M': // Mod255
+                    Mod255();
+                    break;
+                case 'P': // Polis Çakarı
+                    PolisCakari();
+                    break;
+                default:
+                    break;
+            }
+            received_char = 0; // Komut işlendi
+        }
+    }
+}
+
+// Kara Şimşek Efekti
+void KaraSimsek(void) {
+    for (int i = 0; i < 4; i++) {
+        HAL_GPIO_WritePin(LED_PORT, (1 << i), GPIO_PIN_SET);
+        delay_ms(100);
+        HAL_GPIO_WritePin(LED_PORT, (1 << i), GPIO_PIN_RESET);
+    }
+    for (int i = 2; i > 0; i--) {
+        HAL_GPIO_WritePin(LED_PORT, (1 << i), GPIO_PIN_SET);
+        delay_ms(100);
+        HAL_GPIO_WritePin(LED_PORT, (1 << i), GPIO_PIN_RESET);
+    }
+}
+
+// Led Chaser Efekti
+void LedChaser(void) {
+    for (int i = 0; i < 4; i++) {
+        HAL_GPIO_WritePin(LED_PORT, (1 << i), GPIO_PIN_SET);
+        delay_ms(100);
+        HAL_GPIO_WritePin(LED_PORT, (1 << i), GPIO_PIN_RESET);
+    }
+}
+
+// Mod255 (Rastgele LED Yak)
+void Mod255(void) {
+    for (int i = 0; i < 10; i++) {
+        uint32_t random_led = (1 << (rand() % 4));
+        HAL_GPIO_WritePin(LED_PORT, random_led, GPIO_PIN_SET);
+        delay_ms(200);
+        HAL_GPIO_WritePin(LED_PORT, random_led, GPIO_PIN_RESET);
+    }
+}
+
+// Polis Çakarı Efekti
+void PolisCakari(void) {
+    for (int i = 0; i < 5; i++) {
+        HAL_GPIO_WritePin(LED_PORT, LED1_PIN | LED2_PIN, GPIO_PIN_SET);
+        delay_ms(200);
+        HAL_GPIO_WritePin(LED_PORT, LED1_PIN | LED2_PIN, GPIO_PIN_RESET);
+        HAL_GPIO_WritePin(LED_PORT, LED3_PIN | LED4_PIN, GPIO_PIN_SET);
+        delay_ms(200);
+        HAL_GPIO_WritePin(LED_PORT, LED3_PIN | LED4_PIN, GPIO_PIN_RESET);
+    }
+}
+
+// GPIO Başlatma
+void GPIO_Init(void) {
+    RCC->AHB1ENR |= RCC_AHB1ENR_GPIOAEN; // GPIOA Saatini Aktif Et
+
+    // GPIOA Pinlerini Çıkış Moduna Ayarla
+    LED_PORT->MODER |= (0b01 << (LED1_PIN * 2)) | (0b01 << (LED2_PIN * 2)) |
+                        (0b01 << (LED3_PIN * 2)) | (0b01 << (LED4_PIN * 2));
+}
+
+// UART Başlatma
+void UART_Init(void) {
+    RCC->APB1ENR |= RCC_APB1ENR_USART2EN; // USART2 Saatini Aktif Et
+
+    // UART Ayarları (9600 baud, 8N1)
+    USART2->BRR = 0x0683; // 16 MHz için 9600 Baud
+    USART2->CR1 = USART_CR1_TE | USART_CR1_RE | USART_CR1_RXNEIE;
+    USART2->CR1 |= USART_CR1_UE; // UART Etkinleştir
+
+    NVIC_EnableIRQ(USART2_IRQn); // UART Interrupt Etkinleştir
+}
+
+// UART Kesmesi
+void USART2_IRQHandler(void) {
+    if (USART2->SR & USART_SR_RXNE) {
+        received_char = USART2->DR; // Gelen Veriyi Al
+    }
+}
+
+// Sistem Saati Konfigürasyonu
+void SystemClock_Config(void) {
+    // Temel Saat Ayarları (HSE veya HSI kullanılabilir)
+}
+
+// Milisaniye Gecikme
+void delay_ms(uint32_t ms) {
+    for (volatile uint32_t i = 0; i < ms * 8000; i++);
+}
