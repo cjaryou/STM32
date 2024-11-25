@@ -1,112 +1,86 @@
 #include "stm32f4xx.h"
 
-// LED ve Tuş Pinleri Tanımlamaları
-#define LED_PORTU GPIOA
-#define LED_PINI GPIO_Pin_5
-#define TUSLER_PORTU GPIOB
-#define TUS_L GPIO_Pin_0
-#define TUS_M GPIO_Pin_1
-#define TUS_P GPIO_Pin_2
-#define TUS_K GPIO_Pin_3
+#define LED_PORT GPIOA
+#define LED_PIN GPIO_Pin_5
+#define BUTTON_PORT GPIOB
+#define BUTTON_L GPIO_Pin_0
+#define BUTTON_M GPIO_Pin_1
+#define BUTTON_P GPIO_Pin_2
+#define BUTTON_K GPIO_Pin_3
 
-// Global Değişkenler
-volatile uint8_t aktif_mod = 0;
-
-// Gecikme Fonksiyonu
-void gecikme(volatile uint32_t sure) {
-    while (sure--) {
-        __NOP(); // İşlemciyi bekletmek için No Operation
-    }
+void delay(volatile uint32_t s) {
+    for(; s>0; s--);
 }
 
-// GPIO Başlatma
-void gpio_baslat() {
-    // LED GPIO Portunu etkinleştir
+void initLED() {
     RCC_AHB1PeriphClockCmd(RCC_AHB1Periph_GPIOA, ENABLE);
-    GPIO_InitTypeDef LED_InitStruct;
-    LED_InitStruct.GPIO_Pin = LED_PINI;
-    LED_InitStruct.GPIO_Mode = GPIO_Mode_OUT;
-    LED_InitStruct.GPIO_OType = GPIO_OType_PP;
-    LED_InitStruct.GPIO_PuPd = GPIO_PuPd_NOPULL;
-    LED_InitStruct.GPIO_Speed = GPIO_Speed_50MHz;
-    GPIO_Init(LED_PORTU, &LED_InitStruct);
+    GPIO_InitTypeDef GPIO_InitStructure;
+    GPIO_InitStructure.GPIO_Pin = LED_PIN;
+    GPIO_InitStructure.GPIO_Mode = GPIO_Mode_OUT;
+    GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
+    GPIO_InitStructure.GPIO_OType = GPIO_OType_PP;
+    GPIO_InitStructure.GPIO_PuPd = GPIO_PuPd_NOPULL;
+    GPIO_Init(LED_PORT, &GPIO_InitStructure);
 
-    // Tuş GPIO Portunu etkinleştir
     RCC_AHB1PeriphClockCmd(RCC_AHB1Periph_GPIOB, ENABLE);
-    GPIO_InitTypeDef Button_InitStruct;
-    Button_InitStruct.GPIO_Pin = TUS_L | TUS_M | TUS_P | TUS_K;
-    Button_InitStruct.GPIO_Mode = GPIO_Mode_IN;
-    Button_InitStruct.GPIO_PuPd = GPIO_PuPd_UP; // Pull-up dirençleri etkin
-    GPIO_Init(TUSLER_PORTU, &Button_InitStruct);
+    GPIO_InitStructure.GPIO_Pin = BUTTON_L | BUTTON_M | BUTTON_P | BUTTON_K;
+    GPIO_InitStructure.GPIO_Mode = GPIO_Mode_IN;
+    GPIO_InitStructure.GPIO_PuPd = GPIO_PuPd_UP;
+    GPIO_Init(BUTTON_PORT, &GPIO_InitStructure);
 }
 
-// Kara Şimşek Efekti
 void kara_simsek() {
-    for (int i = 0; i < 4; i++) {
-        GPIO_SetBits(LED_PORTU, LED_PINI);
-        gecikme(500000);
-        GPIO_ResetBits(LED_PORTU, LED_PINI);
-        gecikme(500000);
+    for(int j = 0; j < 3; j++) {
+        for(int i = 0; i < 6; i++) {
+            GPIO_WriteBit(LED_PORT, LED_PIN, Bit_SET);
+            delay(50000);
+            GPIO_WriteBit(LED_PORT, LED_PIN, Bit_RESET);
+            delay(50000);
+        }
     }
 }
 
-// LED Chaser Efekti
-void led_takipcisi() {
-    for (int i = 0; i < 6; i++) {
-        GPIO_ToggleBits(LED_PORTU, LED_PINI);
-        gecikme(500000);
+void led_chaser() {
+    for(int j = 0; j < 5; j++) {
+        GPIO_ToggleBit(LED_PORT, LED_PIN);
+        delay(50000);
     }
 }
 
-// Mod 255 Efekti
-void mod_255() {
-    for (int i = 0; i < 255; i++) {
-        GPIO_WriteBit(LED_PORTU, LED_PINI, (i % 2) ? Bit_SET : Bit_RESET);
-        gecikme(100000);
+void mod255() {
+    for(uint8_t i = 0; i < 255; i++) {
+        GPIO_Write(LED_PORT, i);
+        delay(10000);
     }
 }
 
-// Polis Çakarı Efekti
 void polis_cakari() {
-    for (int i = 0; i < 6; i++) {
-        GPIO_SetBits(LED_PORTU, LED_PINI);
-        gecikme(300000);
-        GPIO_ResetBits(LED_PORTU, LED_PINI);
-        gecikme(300000);
+    for(int j = 0; j < 10; j++) {
+        GPIO_SetBits(LED_PORT, LED_PIN);
+        delay(30000);
+        GPIO_ResetBits(LED_PORT, LED_PIN);
+        delay(30000);
     }
 }
 
-// Tuş Durumunu Oku
-uint8_t tus_kontrol() {
-    if (GPIO_ReadInputDataBit(TUSLER_PORTU, TUS_K) == Bit_RESET) return 1; // Kara Şimşek
-    if (GPIO_ReadInputDataBit(TUSLER_PORTU, TUS_L) == Bit_RESET) return 2; // LED Chaser
-    if (GPIO_ReadInputDataBit(TUSLER_PORTU, TUS_M) == Bit_RESET) return 3; // Mod 255
-    if (GPIO_ReadInputDataBit(TUSLER_PORTU, TUS_P) == Bit_RESET) return 4; // Polis Çakarı
-    return 0; // Hiçbir tuş basılı değil
-}
-
-// Ana Fonksiyon
 int main(void) {
-    SystemInit(); // Sistemi başlat
-    gpio_baslat(); // GPIO'ları başlat
-
-    while (1) {
-        // Tuş kontrolü
-        uint8_t yeni_mod = tus_kontrol();
-        if (yeni_mod != 0) {
-            aktif_mod = yeni_mod;
+    SystemInit();
+    initLED();
+    
+    while(1) {
+        if(GPIO_ReadInputDataBit(BUTTON_PORT, BUTTON_K) == Bit_RESET) {
+            kara_simsek();
         }
-
-        // Aktif moda göre işlem yap
-        switch (aktif_mod) {
-            case 1: kara_simsek(); break;
-            case 2: led_takipcisi(); break;
-            case 3: mod_255(); break;
-            case 4: polis_cakari(); break;
-            default: break;
+        else if(GPIO_ReadInputDataBit(BUTTON_PORT, BUTTON_L) == Bit_RESET) {
+            led_chaser();
         }
-
-        // Mod değişimi sırasında bekleme
-        gecikme(1000000);
+        else if(GPIO_ReadInputDataBit(BUTTON_PORT, BUTTON_M) == Bit_RESET) {
+            mod255();
+        }
+        else if(GPIO_ReadInputDataBit(BUTTON_PORT, BUTTON_P) == Bit_RESET) {
+            polis_cakari();
+        }
+        
+        delay(50000);
     }
 }
