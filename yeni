@@ -1,90 +1,95 @@
 #include "stm32f4xx.h"
 
-// Pin Tanımları
-#define LED_PORT GPIOA
-#define LED_PIN GPIO_Pin_5
-#define BUTTON_PORT GPIOB
-#define BUTTON_L GPIO_Pin_0
-#define BUTTON_M GPIO_Pin_1
-#define BUTTON_P GPIO_Pin_2
-#define BUTTON_K GPIO_Pin_3
+#define DELAY 100  // Gecikme süresi (ms)
 
-void delay(volatile uint32_t s) {
-    for(; s>0; s--);
-}
-
-void initLED() {
-    // LED Port Ayarları
-    RCC_AHB1PeriphClockCmd(RCC_AHB1Periph_GPIOA, ENABLE);
-    GPIO_InitTypeDef GPIO_InitStructure;
-    GPIO_InitStructure.GPIO_Pin = LED_PIN;
-    GPIO_InitStructure.GPIO_Mode = GPIO_Mode_OUT;
-    GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
-    GPIO_InitStructure.GPIO_OType = GPIO_OType_PP;
-    GPIO_InitStructure.GPIO_PuPd = GPIO_PuPd_NOPULL;
-    GPIO_Init(LED_PORT, &GPIO_InitStructure);
-
-    // Buton Port Ayarları
-    RCC_AHB1PeriphClockCmd(RCC_AHB1Periph_GPIOB, ENABLE);
-    GPIO_InitStructure.GPIO_Pin = BUTTON_L | BUTTON_M | BUTTON_P | BUTTON_K;
-    GPIO_InitStructure.GPIO_Mode = GPIO_Mode_IN;
-    GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
-    GPIO_InitStructure.GPIO_PuPd = GPIO_PuPd_UP;
-    GPIO_Init(BUTTON_PORT, &GPIO_InitStructure);
-}
-
-void kara_simsek() {
-    for(int j = 0; j < 3; j++) {
-        for(int i = 0; i < 6; i++) {
-            GPIO_WriteBit(LED_PORT, LED_PIN, Bit_SET);
-            delay(50000);
-            GPIO_WriteBit(LED_PORT, LED_PIN, Bit_RESET);
-            delay(50000);
-        }
+// Gecikme fonksiyonu
+void delay_ms(uint32_t ms) {
+    for (uint32_t i = 0; i < ms * 4000; i++) {
+        __NOP(); // Bos döngü (yaklasik 1 ms)
     }
 }
 
-void led_chaser() {
-    for(int j = 0; j < 5; j++) {
-        GPIO_ToggleBit(LED_PORT, LED_PIN);
-        delay(50000);
-    }
+// GPIO'yu başlat
+void GPIO_Init(void) {
+    // GPIOB için saat etkinleştir (LED'ler)
+    RCC->AHB1ENR |= RCC_AHB1ENR_GPIOBEN;
+
+    // GPIOC için saat etkinleştir (Buton - PC13)
+    RCC->AHB1ENR |= RCC_AHB1ENR_GPIOCEN;
+
+    // PB0-PB7 pinlerini çıkış moduna ayarla
+    GPIOB->MODER &= ~0x0000FFFF; // Mod temizleme
+    GPIOB->MODER |= 0x00005555;  // Çıkış moduna ayarla
+
+    // PC13 pinini giriş moduna ayarla
+    GPIOC->MODER &= ~(3UL << (13 * 2)); // Giriş modu
+    GPIOC->PUPDR &= ~(3UL << (13 * 2)); // Pull-up/pull-down temizle
+    GPIOC->PUPDR |= (2UL << (13 * 2));  // Pull-down aktif et
 }
 
-void mod255() {
-    for(uint8_t i = 0; i < 255; i++) {
-        GPIO_Write(LED_PORT, i);
-        delay(10000);
-    }
+// LED durumlarını güncelle
+void LED_Display(uint8_t pattern) {
+    GPIOB->ODR = (GPIOB->ODR & ~0xFF) | (pattern & 0xFF);
 }
 
-void polis_cakari() {
-    for(int j = 0; j < 10; j++) {
-        GPIO_SetBits(LED_PORT, LED_PIN);
-        delay(30000);
-        GPIO_ResetBits(LED_PORT, LED_PIN);
-        delay(30000);
+// LED desenlerini kontrol et
+void LED_Pattern(uint8_t pattern_index) {
+    switch (pattern_index) {
+        case 0: // Ortadan dışa doğru
+            for (int i = 0; i < 4; i++) {
+                LED_Display((1 << (3 - i)) | (1 << (4 + i)));
+                delay_ms(DELAY);
+            }
+            break;
+        case 1: // Soldaki 4 LED
+            for (int i = 0; i < 2; i++) {
+                LED_Display(0x0F); // Soldaki LED'leri yak
+                delay_ms(DELAY);
+                LED_Display(0x00); // Tüm LED'leri kapat
+                delay_ms(DELAY);
+            }
+            break;
+        case 2: // Sağdaki 4 LED
+            for (int i = 0; i < 2; i++) {
+                LED_Display(0xF0); // Sağdaki LED'leri yak
+                delay_ms(DELAY);
+                LED_Display(0x00); // Tüm LED'leri kapat
+                delay_ms(DELAY);
+            }
+            break;
+        case 3: // LED chaser (tek tek ilerleyen ışık)
+            for (int i = 0; i < 8; i++) {
+                LED_Display(1 << i);
+                delay_ms(DELAY);
+            }
+            break;
+        default: // Tüm LED'leri kapat
+            LED_Display(0x00);
+            break;
     }
 }
 
 int main(void) {
-    SystemInit();
-    initLED();
-    
-    while(1) {
-        if(GPIO_ReadInputDataBit(BUTTON_PORT, BUTTON_K) == Bit_RESET) {
-            kara_simsek();
+    GPIO_Init(); // GPIO yapılandırma
+
+    uint8_t current_pattern = 0; // Aktif desen indeksi
+    uint8_t button_state = 0;    // Buton durumu
+
+    while (1) {
+        // LED desenini uygula
+        LED_Pattern(current_pattern);
+
+        // Butonun durumunu kontrol et (PC13 LOW ise basılmış demektir)
+        if ((GPIOC->IDR & (1 << 13)) == 0) {
+            delay_ms(50); // Debouncing için küçük gecikme
+            if ((GPIOC->IDR & (1 << 13)) == 0) { // Hala basılıysa
+                if (!button_state) { // Daha önce algılanmamışsa
+                    current_pattern = (current_pattern + 1) % 4; // Deseni değiştir
+                    button_state = 1; // Butonun basıldığını kaydet
+                }
+            }
+        } else {
+            button_state = 0; // Buton bırakıldıysa sıfırla
         }
-        else if(GPIO_ReadInputDataBit(BUTTON_PORT, BUTTON_L) == Bit_RESET) {
-            led_chaser();
-        }
-        else if(GPIO_ReadInputDataBit(BUTTON_PORT, BUTTON_M) == Bit_RESET) {
-            mod255();
-        }
-        else if(GPIO_ReadInputDataBit(BUTTON_PORT, BUTTON_P) == Bit_RESET) {
-            polis_cakari();
-        }
-        
-        delay(50000);
     }
 }
