@@ -1,0 +1,116 @@
+#include "stm32f4xx.h"
+
+// LED ve Tuş Pinleri Tanımlamaları
+#define LED_PORTU GPIOA
+#define LED_PINI GPIO_Pin_5
+#define TUSLER_PORTU GPIOB
+#define TUS_L GPIO_Pin_0
+#define TUS_M GPIO_Pin_1
+#define TUS_P GPIO_Pin_2
+#define TUS_K GPIO_Pin_3
+
+// Global Değişkenler
+volatile uint8_t aktif_mod = 0;
+
+// Gecikme Fonksiyonu
+void gecikme(volatile uint32_t sure) {
+    for(; sure>0; sure--);
+}
+
+// LED Başlatma Fonksiyonu
+void led_baslat() {
+    // LED Portu Ayarları
+    RCC_AHB1PeriphClockCmd(RCC_AHB1Periph_GPIOA, ENABLE);
+    GPIO_InitTypeDef GPIO_LED_Yapilandirma;
+    GPIO_LED_Yapilandirma.GPIO_Pin = LED_PINI;
+    GPIO_LED_Yapilandirma.GPIO_Mode = GPIO_Mode_OUT;
+    GPIO_LED_Yapilandirma.GPIO_Speed = GPIO_Speed_50MHz;
+    GPIO_LED_Yapilandirma.GPIO_OType = GPIO_OType_PP;
+    GPIO_LED_Yapilandirma.GPIO_PuPd = GPIO_PuPd_NOPULL;
+    GPIO_Init(LED_PORTU, &GPIO_LED_Yapilandirma);
+
+    // Tuş Portu Ayarları
+    RCC_AHB1PeriphClockCmd(RCC_AHB1Periph_GPIOB, ENABLE);
+    GPIO_InitTypeDef GPIO_TUS_Yapilandirma;
+    GPIO_TUS_Yapilandirma.GPIO_Pin = TUS_L | TUS_M | TUS_P | TUS_K;
+    GPIO_TUS_Yapilandirma.GPIO_Mode = GPIO_Mode_IN;
+    GPIO_TUS_Yapilandirma.GPIO_Speed = GPIO_Speed_50MHz;
+    GPIO_TUS_Yapilandirma.GPIO_PuPd = GPIO_PuPd_UP;
+    GPIO_Init(TUSLER_PORTU, &GPIO_TUS_Yapilandirma);
+}
+
+// Kara Şimşek Deseni
+void kara_simsek() {
+    for(int j = 0; j < 3; j++) {
+        for(int i = 0; i < 6; i++) {
+            GPIO_WriteBit(LED_PORTU, LED_PINI, Bit_SET);
+            gecikme(50000);
+            GPIO_WriteBit(LED_PORTU, LED_PINI, Bit_RESET);
+            gecikme(50000);
+        }
+    }
+}
+
+// LED Takipçisi Deseni
+void led_takipcisi() {
+    for(int j = 0; j < 5; j++) {
+        GPIO_ToggleBit(LED_PORTU, LED_PINI);
+        gecikme(50000);
+    }
+}
+
+// Mod 255 Deseni
+void mod_255() {
+    for(uint8_t i = 0; i < 255; i++) {
+        GPIO_Write(LED_PORTU, i);
+        gecikme(10000);
+    }
+}
+
+// Polis Çakarı Deseni
+void polis_cakari() {
+    for(int j = 0; j < 10; j++) {
+        GPIO_SetBits(LED_PORTU, LED_PINI);
+        gecikme(30000);
+        GPIO_ResetBits(LED_PORTU, LED_PINI);
+        gecikme(30000);
+    }
+}
+
+// Tuş Kontrol Fonksiyonu
+void tus_kontrol() {
+    if(GPIO_ReadInputDataBit(TUSLER_PORTU, TUS_K) == Bit_RESET) {
+        aktif_mod = 1; // Kara Şimşek
+    } else if(GPIO_ReadInputDataBit(TUSLER_PORTU, TUS_L) == Bit_RESET) {
+        aktif_mod = 2; // LED Takipçisi
+    } else if(GPIO_ReadInputDataBit(TUSLER_PORTU, TUS_M) == Bit_RESET) {
+        aktif_mod = 3; // Mod 255
+    } else if(GPIO_ReadInputDataBit(TUSLER_PORTU, TUS_P) == Bit_RESET) {
+        aktif_mod = 4; // Polis Çakarı
+    }
+}
+
+// Ana Çalışma Fonksiyonu
+int main(void) {
+    // Sistemin başlatılması
+    SystemInit();
+    
+    // LED ve Tuş pinlerini başlat
+    led_baslat();
+    
+    while(1) {
+        // Tuş kontrolü
+        tus_kontrol();
+        
+        // Seçilen moda göre işlem
+        switch(aktif_mod) {
+            case 1: kara_simsek(); break;
+            case 2: led_takipcisi(); break;
+            case 3: mod_255(); break;
+            case 4: polis_cakari(); break;
+        }
+        
+        // Mod değişiminden sonra biraz bekle
+        gecikme(100000);
+    }
+}
