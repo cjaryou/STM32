@@ -1,135 +1,108 @@
 #include "stm32f4xx.h"
 
-// LED PINLERİ TANIMLARI (Örnek: LED'ler GPIOA'da)
-#define LED1_PIN  GPIO_PIN_0
-#define LED2_PIN  GPIO_PIN_1
-#define LED3_PIN  GPIO_PIN_2
-#define LED4_PIN  GPIO_PIN_3
-#define LED_PORT  GPIOA
+// LED ve Tuş Pinleri Tanımlamaları
+#define LED_PORTU GPIOA
+#define LED_PINI GPIO_Pin_5
+#define TUSLER_PORTU GPIOB
+#define TUS_L GPIO_Pin_0
+#define TUS_M GPIO_Pin_1
+#define TUS_P GPIO_Pin_2
+#define TUS_K GPIO_Pin_3
 
-// UART Girdi Değişkeni
-volatile char received_char = 0;
+// Global Değişkenler
+volatile uint8_t aktif_mod = 0;
 
-// Fonksiyon Prototipleri
-void SystemClock_Config(void);
-void GPIO_Init(void);
-void UART_Init(void);
-void delay_ms(uint32_t ms);
+// Gecikme Fonksiyonu
+void gecikme(volatile uint32_t sure) {
+    for(; sure > 0; sure--);
+}
 
-void KaraSimsek(void);
-void LedChaser(void);
-void Mod255(void);
-void PolisCakari(void);
+// LED Başlatma Fonksiyonu
+void led_baslat() {
+    // LED Portu Ayarları
+    RCC_AHB1PeriphClockCmd(RCC_AHB1Periph_GPIOA, ENABLE);
+    GPIO_InitTypeDef GPIO_LED_Yapilandirma;
+    GPIO_LED_Yapilandirma.GPIO_Pin = LED_PINI;
+    GPIO_LED_Yapilandirma.GPIO_Mode = GPIO_Mode_OUT;
+    GPIO_LED_Yapilandirma.GPIO_Speed = GPIO_Speed_50MHz;
+    GPIO_LED_Yapilandirma.GPIO_OType = GPIO_OType_PP;
+    GPIO_LED_Yapilandirma.GPIO_PuPd = GPIO_PuPd_NOPULL;
+    GPIO_Init(LED_PORTU, &GPIO_LED_Yapilandirma);
 
-// Ana Program
-int main(void) {
-    // Başlangıç Ayarları
-    SystemClock_Config();
-    GPIO_Init();
-    UART_Init();
+    // Tuş Portu Ayarları
+    RCC_AHB1PeriphClockCmd(RCC_AHB1Periph_GPIOB, ENABLE);
+    GPIO_InitTypeDef GPIO_TUS_Yapilandirma;
+    GPIO_TUS_Yapilandirma.GPIO_Pin = TUS_L | TUS_M | TUS_P | TUS_K;
+    GPIO_TUS_Yapilandirma.GPIO_Mode = GPIO_Mode_IN;
+    GPIO_TUS_Yapilandirma.GPIO_Speed = GPIO_Speed_50MHz;
+    GPIO_TUS_Yapilandirma.GPIO_PuPd = GPIO_PuPd_UP;
+    GPIO_Init(TUSLER_PORTU, &GPIO_TUS_Yapilandirma);
+}
 
-    while (1) {
-        if (received_char != 0) {
-            switch (received_char) {
-                case 'K': // Kara Şimşek
-                    KaraSimsek();
-                    break;
-                case 'L': // Led Chaser
-                    LedChaser();
-                    break;
-                case 'M': // Mod255
-                    Mod255();
-                    break;
-                case 'P': // Polis Çakarı
-                    PolisCakari();
-                    break;
-                default:
-                    break;
-            }
-            received_char = 0; // Komut işlendi
-        }
+// Kara Şimşek Deseni
+void kara_simsek() {
+    for (int i = 0; i < 6; i++) {
+        GPIO_SetBits(LED_PORTU, LED_PINI);
+        gecikme(50000);
+        GPIO_ResetBits(LED_PORTU, LED_PINI);
+        gecikme(50000);
     }
 }
 
-// Kara Şimşek Efekti
-void KaraSimsek(void) {
-    for (int i = 0; i < 4; i++) {
-        HAL_GPIO_WritePin(LED_PORT, (1 << i), GPIO_PIN_SET);
-        delay_ms(100);
-        HAL_GPIO_WritePin(LED_PORT, (1 << i), GPIO_PIN_RESET);
-    }
-    for (int i = 2; i > 0; i--) {
-        HAL_GPIO_WritePin(LED_PORT, (1 << i), GPIO_PIN_SET);
-        delay_ms(100);
-        HAL_GPIO_WritePin(LED_PORT, (1 << i), GPIO_PIN_RESET);
-    }
-}
-
-// Led Chaser Efekti
-void LedChaser(void) {
-    for (int i = 0; i < 4; i++) {
-        HAL_GPIO_WritePin(LED_PORT, (1 << i), GPIO_PIN_SET);
-        delay_ms(100);
-        HAL_GPIO_WritePin(LED_PORT, (1 << i), GPIO_PIN_RESET);
-    }
-}
-
-// Mod255 (Rastgele LED Yak)
-void Mod255(void) {
-    for (int i = 0; i < 10; i++) {
-        uint32_t random_led = (1 << (rand() % 4));
-        HAL_GPIO_WritePin(LED_PORT, random_led, GPIO_PIN_SET);
-        delay_ms(200);
-        HAL_GPIO_WritePin(LED_PORT, random_led, GPIO_PIN_RESET);
-    }
-}
-
-// Polis Çakarı Efekti
-void PolisCakari(void) {
+// LED Takipçisi Deseni
+void led_takipcisi() {
     for (int i = 0; i < 5; i++) {
-        HAL_GPIO_WritePin(LED_PORT, LED1_PIN | LED2_PIN, GPIO_PIN_SET);
-        delay_ms(200);
-        HAL_GPIO_WritePin(LED_PORT, LED1_PIN | LED2_PIN, GPIO_PIN_RESET);
-        HAL_GPIO_WritePin(LED_PORT, LED3_PIN | LED4_PIN, GPIO_PIN_SET);
-        delay_ms(200);
-        HAL_GPIO_WritePin(LED_PORT, LED3_PIN | LED4_PIN, GPIO_PIN_RESET);
+        GPIO_ToggleBits(LED_PORTU, LED_PINI);
+        gecikme(50000);
     }
 }
 
-// GPIO Başlatma
-void GPIO_Init(void) {
-    RCC->AHB1ENR |= RCC_AHB1ENR_GPIOAEN; // GPIOA Saatini Aktif Et
-
-    // GPIOA Pinlerini Çıkış Moduna Ayarla
-    LED_PORT->MODER |= (0b01 << (LED1_PIN * 2)) | (0b01 << (LED2_PIN * 2)) |
-                        (0b01 << (LED3_PIN * 2)) | (0b01 << (LED4_PIN * 2));
-}
-
-// UART Başlatma
-void UART_Init(void) {
-    RCC->APB1ENR |= RCC_APB1ENR_USART2EN; // USART2 Saatini Aktif Et
-
-    // UART Ayarları (9600 baud, 8N1)
-    USART2->BRR = 0x0683; // 16 MHz için 9600 Baud
-    USART2->CR1 = USART_CR1_TE | USART_CR1_RE | USART_CR1_RXNEIE;
-    USART2->CR1 |= USART_CR1_UE; // UART Etkinleştir
-
-    NVIC_EnableIRQ(USART2_IRQn); // UART Interrupt Etkinleştir
-}
-
-// UART Kesmesi
-void USART2_IRQHandler(void) {
-    if (USART2->SR & USART_SR_RXNE) {
-        received_char = USART2->DR; // Gelen Veriyi Al
+// Mod 255 Deseni
+void mod_255() {
+    for (int i = 0; i < 255; i++) {
+        GPIO_WriteBit(LED_PORTU, LED_PINI, i % 2);
+        gecikme(10000);
     }
 }
 
-// Sistem Saati Konfigürasyonu
-void SystemClock_Config(void) {
-    // Temel Saat Ayarları (HSE veya HSI kullanılabilir)
+// Polis Çakarı Deseni
+void polis_cakari() {
+    for (int i = 0; i < 10; i++) {
+        GPIO_SetBits(LED_PORTU, LED_PINI);
+        gecikme(30000);
+        GPIO_ResetBits(LED_PORTU, LED_PINI);
+        gecikme(30000);
+    }
 }
 
-// Milisaniye Gecikme
-void delay_ms(uint32_t ms) {
-    for (volatile uint32_t i = 0; i < ms * 8000; i++);
+// Tuş Kontrol Fonksiyonu
+void tus_kontrol() {
+    if (GPIO_ReadInputDataBit(TUSLER_PORTU, TUS_K) == Bit_RESET) {
+        aktif_mod = 1; // Kara Şimşek
+    } else if (GPIO_ReadInputDataBit(TUSLER_PORTU, TUS_L) == Bit_RESET) {
+        aktif_mod = 2; // LED Takipçisi
+    } else if (GPIO_ReadInputDataBit(TUSLER_PORTU, TUS_M) == Bit_RESET) {
+        aktif_mod = 3; // Mod 255
+    } else if (GPIO_ReadInputDataBit(TUSLER_PORTU, TUS_P) == Bit_RESET) {
+        aktif_mod = 4; // Polis Çakarı
+    }
+}
+
+// Ana Çalışma Fonksiyonu
+int main(void) {
+    SystemInit(); // Sistemi başlat
+    led_baslat(); // LED ve Tuşları başlat
+    
+    while (1) {
+        tus_kontrol(); // Tuşları kontrol et
+        
+        switch (aktif_mod) {
+            case 1: kara_simsek(); break;
+            case 2: led_takipcisi(); break;
+            case 3: mod_255(); break;
+            case 4: polis_cakari(); break;
+            default: break;
+        }
+        gecikme(100000);
+    }
 }
